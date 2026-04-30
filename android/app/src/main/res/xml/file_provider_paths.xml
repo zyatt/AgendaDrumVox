@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Caminhos expostos pelo FileProvider para que o instalador do Android
+  consiga acessar o APK baixado pelo app.
+
+  Coloque este arquivo em: android/app/src/main/res/xml/file_provider_paths.xml
+-->
+<paths>
+    <!-- Diretório de cache externo: /sdcard/Android/data/<package>/files -->
+    <external-files-path
+        name="external_files"
+        path="." />
+
+    <!-- Cache interno (fallback) -->
+    <cache-path
+        name="cache"
+        path="." />
+</paths>
