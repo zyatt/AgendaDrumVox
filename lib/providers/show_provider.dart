@@ -1,14 +1,13 @@
 // lib/providers/show_provider.dart
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/show_model.dart';
 import '../services/supabase_service.dart';
-import '../services/notification_service.dart';
 
 class ShowsNotifier extends AsyncNotifier<List<ShowModel>> {
   RealtimeChannel? _channel;
-  bool _suppressNextInsertNotification = false;
 
   @override
   Future<List<ShowModel>> build() async {
@@ -26,18 +25,6 @@ class ShowsNotifier extends AsyncNotifier<List<ShowModel>> {
           schema: 'public',
           table: 'shows',
           callback: (payload) async {
-            // Notifica apenas quando um novo show é inserido por OUTRO dispositivo
-            if (payload.eventType == PostgresChangeEvent.insert) {
-              if (_suppressNextInsertNotification) {
-                _suppressNextInsertNotification = false;
-              } else {
-                try {
-                  final show = ShowModel.fromMap(payload.newRecord);
-                  await NotificationService.showNewShowNotification(show);
-                } catch (_) {}
-              }
-            }
-
             final updated = await SupabaseService.fetchAllShows();
             state = AsyncData(updated);
           },
@@ -51,8 +38,8 @@ class ShowsNotifier extends AsyncNotifier<List<ShowModel>> {
   }
 
   Future<void> addShow(ShowModel show) async {
-    _suppressNextInsertNotification = true;
-    await SupabaseService.createShow(show);
+    final token = await FirebaseMessaging.instance.getToken();
+    await SupabaseService.createShow(show, deviceToken: token);
   }
 
   Future<void> updateShow(ShowModel show) async {

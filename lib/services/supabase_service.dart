@@ -35,9 +35,10 @@ class SupabaseService {
     return (response as List).map((e) => ShowModel.fromMap(e)).toList();
   }
 
-  static Future<ShowModel> createShow(ShowModel show) async {
+  static Future<ShowModel> createShow(ShowModel show, {String? deviceToken}) async {
     final data = show.toMap();
     data['user_id'] = _fixedUserId;
+    if (deviceToken != null) data['created_by_token'] = deviceToken;
 
     final response = await _client
         .from('shows')
@@ -70,7 +71,6 @@ class SupabaseService {
 
     final totalEarnings = shows.fold<double>(0, (sum, s) => sum + s.value);
 
-    // "Recebido": shows com data ANTERIOR a hoje (hoje não conta como recebido)
     final received = shows
         .where((s) {
           final d = DateTime(s.showDate.year, s.showDate.month, s.showDate.day);
@@ -78,7 +78,6 @@ class SupabaseService {
         })
         .fold<double>(0, (sum, s) => sum + s.value);
 
-    // "A receber": shows com data de hoje em diante
     final pending = shows
         .where((s) {
           final d = DateTime(s.showDate.year, s.showDate.month, s.showDate.day);
@@ -95,7 +94,6 @@ class SupabaseService {
     };
   }
 
-  /// Testa a conexão com o Supabase
   static Future<Map<String, dynamic>> testConnection() async {
     try {
       final start = DateTime.now();
@@ -115,5 +113,13 @@ class SupabaseService {
         'url': supabaseUrl,
       };
     }
+  }
+
+  static Future<void> saveFcmToken(String token) async {
+    await _client.from('fcm_tokens').upsert({
+      'user_id': _fixedUserId,
+      'token': token,
+      'updated_at': DateTime.now().toIso8601String(),
+    }, onConflict: 'user_id');
   }
 }

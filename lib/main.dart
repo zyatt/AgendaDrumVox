@@ -5,14 +5,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:firebase_core/firebase_core.dart'; // ← adicione
 import 'screens/home_screen.dart';
 import 'widgets/update_checker_widget.dart';
 import 'utils/app_theme.dart';
 import 'services/notification_service.dart';
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await dotenv.load(fileName: '.env');
+
+  await Firebase.initializeApp(); // ← adicione
 
   await initializeDateFormatting('pt_BR', null);
 
