@@ -1,5 +1,7 @@
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 import '../services/supabase_service.dart';
 
 @pragma('vm:entry-point')
@@ -9,16 +11,34 @@ class NotificationService {
   static final _plugin = FlutterLocalNotificationsPlugin();
   static final _fcm = FirebaseMessaging.instance;
 
+  static Future<String> getOrCreateDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? deviceId = prefs.getString('device_id');
+    if (deviceId == null) {
+      deviceId = const Uuid().v4();
+      await prefs.setString('device_id', deviceId);
+    }
+    return deviceId;
+  }
+
+  // Retorna o token FCM atual
+  static Future<String?> getCurrentToken() async {
+    return await _fcm.getToken();
+  }
+
   static Future<void> initialize() async {
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-    await _fcm.requestPermission(
+    await _fcm.requestPermission(alert: true, badge: true, sound: true);
+
+    await _fcm.setForegroundNotificationPresentationOptions(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
     await _plugin.initialize(
       const InitializationSettings(android: androidSettings),
     );
@@ -30,7 +50,7 @@ class NotificationService {
       importance: Importance.high,
     );
 
-    await _plugin
+    _plugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
 
@@ -64,7 +84,10 @@ class NotificationService {
 
   static Future<void> _saveTokenToSupabase(String token) async {
     try {
-      await SupabaseService.saveFcmToken(token);
-    } catch (_) {}
+      final deviceId = await getOrCreateDeviceId();
+      await SupabaseService.saveFcmToken(token, deviceId: deviceId);
+    } catch (e) {
+      // ignore
+    }
   }
 }

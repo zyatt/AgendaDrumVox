@@ -1,5 +1,3 @@
-// lib/services/supabase_service.dart
-
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/show_model.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -35,10 +33,15 @@ class SupabaseService {
     return (response as List).map((e) => ShowModel.fromMap(e)).toList();
   }
 
-  static Future<ShowModel> createShow(ShowModel show, {String? deviceToken}) async {
+  static Future<ShowModel> createShow(
+    ShowModel show, {
+    String? deviceToken,
+    String? deviceId,
+  }) async {
     final data = show.toMap();
     data['user_id'] = _fixedUserId;
     if (deviceToken != null) data['created_by_token'] = deviceToken;
+    if (deviceId != null) data['created_by_device_id'] = deviceId;
 
     final response = await _client
         .from('shows')
@@ -115,11 +118,11 @@ class SupabaseService {
     }
   }
 
-  static Future<void> saveFcmToken(String token) async {
+  static Future<void> saveFcmToken(String token, {required String deviceId}) async {
     await _client.from('fcm_tokens').upsert({
-      'user_id': _fixedUserId,
+      'device_id': deviceId,
       'token': token,
       'updated_at': DateTime.now().toIso8601String(),
-    }, onConflict: 'user_id');
+    }, onConflict: 'device_id');
   }
 }

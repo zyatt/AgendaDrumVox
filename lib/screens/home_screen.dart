@@ -28,14 +28,6 @@ int _monthGridColumns(BuildContext context) {
   return 2;
 }
 
-double _monthCardAspectRatio(BuildContext context) {
-  final w = MediaQuery.of(context).size.width;
-  if (w >= 1200) return 1.15;
-  if (w >= 900) return 1.05;
-  if (w >= 600) return 1.0;
-  return 1.0;
-}
-
 Widget _centered(Widget child, {double maxWidth = 1100}) {
   return Center(
     child: ConstrainedBox(
@@ -228,35 +220,78 @@ class _YearOverviewState extends ConsumerState<_YearOverview> {
           child: _centered(
             Padding(
               padding: EdgeInsets.fromLTRB(hPad, 0, hPad, 32),
-              child: GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: _monthGridColumns(context),
-                  crossAxisSpacing: desktop ? 14 : 10,
-                  mainAxisSpacing: desktop ? 14 : 10,
-                  childAspectRatio: _monthCardAspectRatio(context),
-                ),
-                itemCount: 12,
-                itemBuilder: (context, index) {
-                  final month = index + 1;
-                  final key = '$_selectedYear-$month';
-                  final monthShows = byMonth[key] ?? [];
-                  return _MonthCard(
-                    year: _selectedYear,
-                    month: month,
-                    shows: monthShows,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => MonthDetailScreen(
-                          year: _selectedYear,
-                          month: month,
-                          shows: monthShows,
-                        ),
-                      ),
-                    ),
-                  );
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final cols = _monthGridColumns(context);
+                  final spacing = desktop ? 14.0 : 10.0;
+                  final cardWidth =
+                      (constraints.maxWidth - spacing * (cols - 1)) / cols;
+
+                  // Calcula o número máximo de datas em qualquer mês do ano
+                  // para que todos os cards tenham a mesma altura
+                  int maxShows = 0;
+                  for (int m = 1; m <= 12; m++) {
+                    final key = '$_selectedYear-$m';
+                    final count = (byMonth[key] ?? []).length;
+                    if (count > maxShows) maxShows = count;
+                  }
+
+                  // Altura do card: header(13+8) + bubble rows + footer(8+14)
+                  // Cada bubble é 24px, spacing 3px; 4 por linha no mobile
+                  const double bubbleSize = 24;
+                  const double bubbleSpacing = 3;
+                  const int bubblesPerRow = 4;
+                  final int bubbleRows = maxShows == 0
+                      ? 1
+                      : ((maxShows + bubblesPerRow - 1) ~/ bubblesPerRow);
+                  final double padding = desktop ? 15.0 : 12.0;
+                  final double headerH = (desktop ? 14.0 : 13.0) + 8; // text + SizedBox
+                  final double bubblesH = maxShows == 0
+                      ? (12 + 12 + 12) // Padding vertical 12 + text ~12 + 12
+                      : (bubbleRows * bubbleSize + (bubbleRows - 1) * bubbleSpacing);
+                  final double footerH = maxShows == 0 ? 0 : (8 + 14); // SizedBox + text row
+                  final double cardHeight = padding * 2 + headerH + bubblesH + footerH + 4;
+
+                  final List<Widget> rows = [];
+                  for (int rowStart = 0; rowStart < 12; rowStart += cols) {
+                    final rowChildren = <Widget>[];
+                    for (int c = 0; c < cols; c++) {
+                      final index = rowStart + c;
+                      if (c > 0) rowChildren.add(SizedBox(width: spacing));
+                      if (index < 12) {
+                        final month = index + 1;
+                        final key = '$_selectedYear-$month';
+                        final monthShows = byMonth[key] ?? [];
+                        rowChildren.add(
+                          SizedBox(
+                            width: cardWidth,
+                            height: cardHeight,
+                            child: _MonthCard(
+                              year: _selectedYear,
+                              month: month,
+                              shows: monthShows,
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => MonthDetailScreen(
+                                    year: _selectedYear,
+                                    month: month,
+                                    shows: monthShows,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      } else {
+                        rowChildren.add(SizedBox(width: cardWidth, height: cardHeight));
+                      }
+                    }
+                    if (rows.isNotEmpty) rows.add(SizedBox(height: spacing));
+                    rows.add(Row(children: rowChildren));
+                  }
+
+                  return Column(children: rows);
                 },
               ),
             ),
