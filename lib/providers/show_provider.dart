@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/show_model.dart';
 import '../services/supabase_service.dart';
+import '../services/notification_service.dart';
 
 class ShowsNotifier extends AsyncNotifier<List<ShowModel>> {
   RealtimeChannel? _channel;
@@ -39,11 +40,22 @@ class ShowsNotifier extends AsyncNotifier<List<ShowModel>> {
 
   Future<void> addShow(ShowModel show) async {
     final token = await FirebaseMessaging.instance.getToken();
-    await SupabaseService.createShow(show, deviceToken: token);
+    final deviceId = await NotificationService.getOrCreateDeviceId();
+    await SupabaseService.createShow(show, deviceToken: token, deviceId: deviceId);
   }
 
   Future<void> updateShow(ShowModel show) async {
     await SupabaseService.updateShow(show);
+  }
+
+  Future<void> cancelShow(ShowModel show) async {
+    final token = await FirebaseMessaging.instance.getToken();
+    final deviceId = await NotificationService.getOrCreateDeviceId();
+    await SupabaseService.cancelShow(show, deviceToken: token, deviceId: deviceId);
+  }
+
+  Future<void> uncancelShow(ShowModel show) async {
+    await SupabaseService.uncancelShow(show);
   }
 
   Future<void> deleteShow(String showId) async {
@@ -76,9 +88,10 @@ final showDatesProvider = Provider<Set<DateTime>>((ref) {
   final showsAsync = ref.watch(showsProvider);
 
   return showsAsync.whenOrNull(data: (shows) {
-    return shows.map((s) => DateTime(
-      s.showDate.year, s.showDate.month, s.showDate.day,
-    )).toSet();
+    return shows
+        .where((s) => !s.cancelled)
+        .map((s) => DateTime(s.showDate.year, s.showDate.month, s.showDate.day))
+        .toSet();
   }) ?? {};
 });
 

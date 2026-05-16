@@ -107,20 +107,24 @@ class _YearOverviewState extends ConsumerState<_YearOverview> {
         .where((s) => s.showDate.year == _selectedYear)
         .toList();
 
+    final activeYearShows = yearShows.where((s) => !s.cancelled).toList();
+    final cancelledYearShows = yearShows.where((s) => s.cancelled).toList();
+
     final Map<String, List<ShowModel>> byMonth = {};
     for (final show in yearShows) {
       final key = '${show.showDate.year}-${show.showDate.month}';
       byMonth.putIfAbsent(key, () => []).add(show);
     }
 
-    final double totalYear = yearShows.fold(0, (sum, s) => sum + s.value);
+    final double totalYear = activeYearShows.fold(0, (sum, s) => sum + s.value);
     final today = DateTime(now.year, now.month, now.day);
-    final double earnedYear = yearShows
+    final double earnedYear = activeYearShows
         .where((s) => DateTime(s.showDate.year, s.showDate.month, s.showDate.day).isBefore(today))
         .fold(0, (sum, s) => sum + s.value);
+    final double cancelledYear = cancelledYearShows.fold(0, (sum, s) => sum + s.value);
 
     final upcomingShows = widget.allShows
-        .where((s) => !DateTime(s.showDate.year, s.showDate.month, s.showDate.day).isBefore(today))
+        .where((s) => !s.cancelled && !DateTime(s.showDate.year, s.showDate.month, s.showDate.day).isBefore(today))
         .toList()
       ..sort((a, b) => a.showDate.compareTo(b.showDate));
     final nextShows = upcomingShows.take(5).toList();
@@ -170,7 +174,8 @@ class _YearOverviewState extends ConsumerState<_YearOverview> {
                 selectedYear: _selectedYear,
                 totalYear: totalYear,
                 earnedYear: earnedYear,
-                showCount: yearShows.length,
+                cancelledYear: cancelledYear,
+                showCount: activeYearShows.length,
                 now: now,
                 desktop: desktop,
               ),
@@ -227,17 +232,13 @@ class _YearOverviewState extends ConsumerState<_YearOverview> {
                   final cardWidth =
                       (constraints.maxWidth - spacing * (cols - 1)) / cols;
 
-                  // Calcula o número máximo de datas em qualquer mês do ano
-                  // para que todos os cards tenham a mesma altura
                   int maxShows = 0;
                   for (int m = 1; m <= 12; m++) {
                     final key = '$_selectedYear-$m';
-                    final count = (byMonth[key] ?? []).length;
+                    final count = (byMonth[key] ?? []).where((s) => !s.cancelled).length;
                     if (count > maxShows) maxShows = count;
                   }
 
-                  // Altura do card: header(13+8) + bubble rows + footer(8+14)
-                  // Cada bubble é 24px, spacing 3px; 4 por linha no mobile
                   const double bubbleSize = 24;
                   const double bubbleSpacing = 3;
                   const int bubblesPerRow = 4;
@@ -245,11 +246,11 @@ class _YearOverviewState extends ConsumerState<_YearOverview> {
                       ? 1
                       : ((maxShows + bubblesPerRow - 1) ~/ bubblesPerRow);
                   final double padding = desktop ? 15.0 : 12.0;
-                  final double headerH = (desktop ? 14.0 : 13.0) + 8; // text + SizedBox
+                  final double headerH = (desktop ? 14.0 : 13.0) + 8;
                   final double bubblesH = maxShows == 0
-                      ? (12 + 12 + 12) // Padding vertical 12 + text ~12 + 12
+                      ? (12 + 12 + 12)
                       : (bubbleRows * bubbleSize + (bubbleRows - 1) * bubbleSpacing);
-                  final double footerH = maxShows == 0 ? 0 : (8 + 14); // SizedBox + text row
+                  final double footerH = maxShows == 0 ? 0 : (8 + 14);
                   final double cardHeight = padding * 2 + headerH + bubblesH + footerH + 4;
 
                   final List<Widget> rows = [];
@@ -406,9 +407,11 @@ class _ArrowBtn extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Icon(icon, color: AppTheme.textSecondary, size: 20),
+      child: Container(
+        width: 32,
+        height: 32,
+        alignment: Alignment.center,
+        child: Icon(icon, size: 18, color: AppTheme.textSecondary),
       ),
     );
   }
@@ -422,6 +425,7 @@ class _YearSummaryCard extends StatelessWidget {
   final int selectedYear;
   final double totalYear;
   final double earnedYear;
+  final double cancelledYear;
   final int showCount;
   final DateTime now;
   final bool desktop;
@@ -430,6 +434,7 @@ class _YearSummaryCard extends StatelessWidget {
     required this.selectedYear,
     required this.totalYear,
     required this.earnedYear,
+    required this.cancelledYear,
     required this.showCount,
     required this.now,
     required this.desktop,
@@ -437,40 +442,33 @@ class _YearSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending = (totalYear - earnedYear).clamp(0.0, double.infinity);
+    final pending = totalYear - earnedYear;
 
     return Container(
+      padding: EdgeInsets.all(desktop ? 20 : 16),
       decoration: BoxDecoration(
         color: AppTheme.card,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: AppTheme.border),
       ),
-      padding: EdgeInsets.all(desktop ? 22 : 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                width: 32,
+                height: 32,
                 decoration: BoxDecoration(
                   color: AppTheme.primaryGlow,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: Text(
-                  '$selectedYear',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.primary,
-                    letterSpacing: 0.4,
-                  ),
-                ),
+                child: const Icon(Icons.bar_chart_rounded, color: AppTheme.primary, size: 17),
               ),
-              const SizedBox(width: 8),
-              const Text(
-                'Resumo do ano',
-                style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
+              const SizedBox(width: 10),
+              Text(
+                'Resumo $selectedYear',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
               ),
               const Spacer(),
               Container(
@@ -480,26 +478,19 @@ class _YearSummaryCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: AppTheme.border),
                 ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.mic_rounded, size: 11, color: AppTheme.textMuted),
-                    const SizedBox(width: 4),
-                    Text(
-                      '$showCount ${showCount == 1 ? 'data' : 'datas'}',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
-                    ),
-                  ],
+                child: Text(
+                  '$showCount show${showCount != 1 ? 's' : ''}',
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
                 child: _StatBox(
-                  label: 'Total do ano',
+                  label: 'Total $selectedYear',
                   value: AppFormatters.currency(totalYear),
                   color: AppTheme.primary,
                   icon: Icons.calendar_month_rounded,
@@ -512,6 +503,15 @@ class _YearSummaryCard extends StatelessWidget {
                   value: AppFormatters.currency(selectedYear < now.year ? totalYear : earnedYear),
                   color: AppTheme.success,
                   icon: Icons.check_circle_outline_rounded,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _StatBox(
+                  label: 'Cancelado',
+                  value: AppFormatters.currency(cancelledYear),
+                  color: AppTheme.error,
+                  icon: Icons.cancel_outlined,
                 ),
               ),
               if (desktop) ...[
@@ -740,11 +740,13 @@ class _MonthCard extends StatelessWidget {
     final isCurrentMonth = now.year == year && now.month == month;
     final isPast = DateTime(year, month + 1, 0).isBefore(DateTime(now.year, now.month, now.day));
 
-    final showDays = shows.map((s) => s.showDate.day).toList()..sort();
-    final double totalMonth = shows.fold(0, (sum, s) => sum + s.value);
+    final activeShows = shows.where((s) => !s.cancelled).toList();
+    final showDays = activeShows.map((s) => s.showDate.day).toList()..sort();
+    final double totalMonth = activeShows.fold(0, (sum, s) => sum + s.value);
     final today = DateTime(now.year, now.month, now.day);
+    final hasCancelled = shows.any((s) => s.cancelled);
 
-    final bool hasShows = shows.isNotEmpty;
+    final bool hasShows = activeShows.isNotEmpty;
     final desktop = _isDesktop(context);
 
     return GestureDetector(
@@ -796,6 +798,10 @@ class _MonthCard extends StatelessWidget {
                   ),
                 if (isPast && !isCurrentMonth && hasShows)
                   const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 14),
+                if (hasCancelled) ...[
+                  const SizedBox(width: 2),
+                  const Icon(Icons.cancel_rounded, color: AppTheme.error, size: 13),
+                ],
               ],
             ),
 
@@ -852,7 +858,7 @@ class _MonthCard extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    '${shows.length} data${shows.length > 1 ? 's' : ''}',
+                    '${activeShows.length} data${activeShows.length > 1 ? 's' : ''}',
                     style: const TextStyle(fontSize: 9, color: AppTheme.textMuted, fontWeight: FontWeight.w600),
                   ),
                   Text(
@@ -910,11 +916,14 @@ class _StatBox extends StatelessWidget {
             style: TextStyle(fontSize: desktop ? 10 : 9, color: color.withValues(alpha: 0.7), fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(fontSize: desktop ? 15 : 13, fontWeight: FontWeight.w800, color: color),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(fontSize: desktop ? 15 : 13, fontWeight: FontWeight.w800, color: color),
+              maxLines: 1,
+            ),
           ),
         ],
       ),
@@ -959,7 +968,6 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
         .toList();
   }
 
-  // Todos os shows sem filtro de mês (usado para verificar shows em dias "outside")
   List<ShowModel> get _allShowsUnfiltered {
     return ref.watch(showsProvider).valueOrNull ?? widget.shows;
   }
@@ -976,11 +984,15 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
     final desktop = _isDesktop(context);
     final isLandMobile = _isLandscapeMobile(context);
 
-    final double totalMonth = shows.fold(0, (sum, s) => sum + s.value);
-    final double earnedMonth = shows
+    final activeShows = shows.where((s) => !s.cancelled).toList();
+    final cancelledShows = shows.where((s) => s.cancelled).toList();
+
+    final double totalMonth = activeShows.fold(0, (sum, s) => sum + s.value);
+    final double earnedMonth = activeShows
         .where((s) => DateTime(s.showDate.year, s.showDate.month, s.showDate.day).isBefore(today))
         .fold(0, (sum, s) => sum + s.value);
     final double pendingMonth = totalMonth - earnedMonth;
+    final double cancelledMonth = cancelledShows.fold(0, (sum, s) => sum + s.value);
 
     final monthName = AppConstants.monthNames[_focusedDay.month - 1];
     final yearLabel = _focusedDay.year;
@@ -1000,9 +1012,9 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
               '$monthName $yearLabel',
               style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
             ),
-            if (shows.isNotEmpty)
+            if (activeShows.isNotEmpty)
               Text(
-                '${shows.length} show${shows.length > 1 ? 's' : ''} · ${AppFormatters.currency(totalMonth)}',
+                '${activeShows.length} data${activeShows.length > 1 ? 's' : ''} · ${AppFormatters.currency(totalMonth)}',
                 style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
               ),
           ],
@@ -1011,8 +1023,8 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
       ),
       body: SafeArea(
         child: (desktop || isLandMobile)
-            ? _buildDesktopLayout(context, shows, today, totalMonth, earnedMonth, pendingMonth)
-            : _buildMobileLayout(context, shows, today, totalMonth, earnedMonth, pendingMonth),
+            ? _buildDesktopLayout(context, shows, today, totalMonth, earnedMonth, pendingMonth, cancelledMonth)
+            : _buildMobileLayout(context, shows, today, totalMonth, earnedMonth, pendingMonth, cancelledMonth),
       ),
     );
   }
@@ -1024,6 +1036,7 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
     double totalMonth,
     double earnedMonth,
     double pendingMonth,
+    double cancelledMonth,
   ) {
     final isLandMobile = _isLandscapeMobile(context);
     final mq = MediaQuery.of(context);
@@ -1046,7 +1059,7 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
                 child: Column(
                   children: [
                     if (!isLandMobile) ...[
-                      _buildStatsRow(totalMonth, earnedMonth, pendingMonth, true),
+                      _buildStatsRow(totalMonth, earnedMonth, pendingMonth, cancelledMonth, true),
                       const SizedBox(height: 16),
                     ],
                     _buildCalendar(today),
@@ -1062,7 +1075,7 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
                   if (isLandMobile)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
-                      child: _buildStatsRow(totalMonth, earnedMonth, pendingMonth, false),
+                      child: _buildStatsRow(totalMonth, earnedMonth, pendingMonth, cancelledMonth, false),
                     ),
                   const Padding(
                     padding: EdgeInsets.only(bottom: 10),
@@ -1115,13 +1128,14 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
     double totalMonth,
     double earnedMonth,
     double pendingMonth,
+    double cancelledMonth,
   ) {
     return CustomScrollView(
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: _buildStatsRow(totalMonth, earnedMonth, pendingMonth, false),
+            child: _buildStatsRow(totalMonth, earnedMonth, pendingMonth, cancelledMonth, false),
           ),
         ),
         const SliverToBoxAdapter(child: SizedBox(height: 12)),
@@ -1161,7 +1175,7 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
     );
   }
 
-  Widget _buildStatsRow(double totalMonth, double earnedMonth, double pendingMonth, bool desktop) {
+  Widget _buildStatsRow(double totalMonth, double earnedMonth, double pendingMonth, double cancelledMonth, bool desktop) {
     return Row(
       children: [
         Expanded(
@@ -1172,7 +1186,7 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
             icon: Icons.attach_money_rounded,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: _StatBox(
             label: 'Recebido',
@@ -1181,13 +1195,22 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
             icon: Icons.check_circle_outline_rounded,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: _StatBox(
             label: 'A receber',
             value: AppFormatters.currency(pendingMonth),
             color: AppTheme.secondary,
             icon: Icons.schedule_rounded,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _StatBox(
+            label: 'Cancelado',
+            value: AppFormatters.currency(cancelledMonth),
+            color: AppTheme.error,
+            icon: Icons.cancel_outlined,
           ),
         ),
       ],
@@ -1260,10 +1283,14 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
         },
         calendarBuilders: CalendarBuilders(
           defaultBuilder: (context, day, focusedDay) {
-            final hasShow = _allShows.any((s) => isSameDay(s.showDate, day));
-            if (!hasShow) return null;
+            final dayShows = _allShows.where((s) => isSameDay(s.showDate, day)).toList();
+            final hasActive = dayShows.any((s) => !s.cancelled);
+            final hasCancelled = dayShows.any((s) => s.cancelled);
+            if (!hasActive && !hasCancelled) return null;
             final isDone = !day.isAfter(today);
-            final color = isDone ? AppTheme.success : AppTheme.secondary;
+            final color = hasActive
+                ? (isDone ? AppTheme.success : AppTheme.secondary)
+                : AppTheme.error;
             return LayoutBuilder(
               builder: (context, constraints) {
                 final size = constraints.maxHeight - 8;
@@ -1292,41 +1319,40 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
           },
           outsideBuilder: (context, day, focusedDay) {
             final isToday = isSameDay(day, today);
-            final hasShow = _allShowsUnfiltered.any((s) => isSameDay(s.showDate, day));
+            final dayShows = _allShowsUnfiltered.where((s) => isSameDay(s.showDate, day)).toList();
+            final hasActive = dayShows.any((s) => !s.cancelled);
+            final hasCancelled = dayShows.any((s) => s.cancelled);
             final isDone = !day.isAfter(today);
-            final color = isDone ? AppTheme.success : AppTheme.secondary;
-            // Dias fora do mês sem show e sem ser hoje → padrão do calendário
-            if (!isToday && !hasShow) return null;
+            final color = hasActive
+                ? (isDone ? AppTheme.success : AppTheme.secondary)
+                : AppTheme.error;
+            if (!isToday && !hasActive && !hasCancelled) return null;
             return LayoutBuilder(
               builder: (context, constraints) {
                 final size = constraints.maxHeight - 8;
                 final radius = BorderRadius.circular(8);
-                // Hoje fora do mês → borda amarela (opaca) + fundo roxo se tiver show
                 if (isToday) {
                   return Center(
                     child: Container(
                       width: size,
                       height: size,
                       decoration: BoxDecoration(
-                        color: hasShow
-                            ? AppTheme.secondary.withValues(alpha: 0.15)
-                            : Colors.transparent,
+                        color: (hasActive || hasCancelled) ? color.withValues(alpha: 0.15) : Colors.transparent,
                         borderRadius: radius,
-                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.5), width: 1.5),
+                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.6), width: 1.5),
                       ),
                       alignment: Alignment.center,
                       child: Text(
                         '${day.day}',
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.primary.withValues(alpha: 0.6),
+                          fontWeight: FontWeight.w700,
+                          color: (hasActive || hasCancelled) ? color : AppTheme.primary,
                         ),
                       ),
                     ),
                   );
                 }
-                // Dia fora do mês com show (não é hoje)
                 return Center(
                   child: Container(
                     width: size,
@@ -1334,16 +1360,12 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.08),
                       borderRadius: radius,
-                      border: Border.all(color: color.withValues(alpha: 0.25), width: 1),
+                      border: Border.all(color: color.withValues(alpha: 0.25)),
                     ),
                     alignment: Alignment.center,
                     child: Text(
                       '${day.day}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: color.withValues(alpha: 0.5),
-                      ),
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color.withValues(alpha: 0.5)),
                     ),
                   ),
                 );
@@ -1351,93 +1373,29 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
             );
           },
           todayBuilder: (context, day, focusedDay) {
-            final hasShow = _allShowsUnfiltered.any((s) => isSameDay(s.showDate, day));
-            final isOutsideMonth = day.month != _focusedDay.month || day.year != _focusedDay.year;
-            final alpha = isOutsideMonth ? 0.5 : 1.0;
+            final dayShows = _allShows.where((s) => isSameDay(s.showDate, day)).toList();
+            final hasActive = dayShows.any((s) => !s.cancelled);
+            final hasCancelled = dayShows.any((s) => s.cancelled);
             return LayoutBuilder(
               builder: (context, constraints) {
                 final size = constraints.maxHeight - 8;
-                final radius = BorderRadius.circular(8);
+                final color = hasActive ? AppTheme.primary : (hasCancelled ? AppTheme.error : AppTheme.primary);
                 return Center(
                   child: Container(
                     width: size,
                     height: size,
                     decoration: BoxDecoration(
-                      // Fundo roxo se tem show, transparente se não tem
-                      color: hasShow
-                          ? AppTheme.secondary.withValues(alpha: isOutsideMonth ? 0.15 : 0.25)
-                          : Colors.transparent,
-                      borderRadius: radius,
-                      // Borda amarela sempre
-                      border: Border.all(color: AppTheme.primary.withValues(alpha: alpha), width: 1.5),
+                      color: (hasActive || hasCancelled) ? color.withValues(alpha: 0.15) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.primary.withValues(alpha: 0.7), width: 1.5),
                     ),
-                    alignment: Alignment.center,
-                    child: Text(
-                      '${day.day}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: AppTheme.primary.withValues(alpha: alpha),
-                      ),
-                    ),
-                  ),
-                );
-              },
-            );
-          },
-          selectedBuilder: (context, day, focusedDay) {
-            final isToday = isSameDay(day, today);
-            final hasShow = _allShows.any((s) => isSameDay(s.showDate, day));
-            final isDone = !day.isAfter(today);
-            final color = isDone ? AppTheme.success : AppTheme.secondary;
-            return LayoutBuilder(
-              builder: (context, constraints) {
-                final size = constraints.maxHeight - 8;
-                final radius = BorderRadius.circular(8);
-                // Se é hoje → borda amarela + fundo roxo se tiver show
-                if (isToday) {
-                  return Center(
-                    child: Container(
-                      width: size,
-                      height: size,
-                      decoration: BoxDecoration(
-                        color: hasShow
-                            ? AppTheme.secondary.withValues(alpha: 0.25)
-                            : Colors.transparent,
-                        borderRadius: radius,
-                        border: Border.all(color: AppTheme.primary, width: 1.5),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${day.day}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w800,
-                          color: AppTheme.primary,
-                        ),
-                      ),
-                    ),
-                  );
-                }
-                // Dia normal selecionado
-                return Center(
-                  child: Container(
-                    width: size,
-                    height: size,
-                    decoration: hasShow
-                        ? BoxDecoration(
-                            color: color.withValues(alpha: 0.15),
-                            borderRadius: radius,
-                            border: Border.all(color: color.withValues(alpha: 0.45), width: 1.2),
-                          )
-                        : null,
                     alignment: Alignment.center,
                     child: Text(
                       '${day.day}',
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
-                        color: hasShow ? color : AppTheme.textPrimary,
+                        color: (hasActive || hasCancelled) ? color : AppTheme.primary,
                       ),
                     ),
                   ),
@@ -1450,33 +1408,34 @@ class _MonthDetailScreenState extends ConsumerState<MonthDetailScreen> {
     );
   }
 
-  Widget _buildDayStrip(DateTime date, List<ShowModel> shows) {
-    final totalValue = shows.fold<double>(0, (sum, s) => sum + s.value);
+  Widget _buildDayStrip(DateTime date, List<ShowModel> dayShows) {
+    final activeShows = dayShows.where((s) => !s.cancelled).toList();
+    final totalValue = activeShows.fold<double>(0, (sum, s) => sum + s.value);
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(0, 10, 0, 6),
+      padding: const EdgeInsets.only(bottom: 10, top: 4),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  AppFormatters.relativeDate(date),
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
-                ),
-                Text(
-                  AppFormatters.dateLong(date),
-                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                ),
-              ],
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                AppFormatters.relativeDate(date),
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
+              ),
+              Text(
+                AppFormatters.dateLong(date),
+                style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+              ),
+            ],
           ),
-          if (shows.isNotEmpty)
+          const Spacer(),
+          if (activeShows.isNotEmpty)
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '${shows.length} data${shows.length > 1 ? 's' : ''}',
+                  '${activeShows.length} data${activeShows.length > 1 ? 's' : ''}',
                   style: const TextStyle(fontSize: 11, color: AppTheme.textMuted),
                 ),
                 Text(
@@ -1674,6 +1633,7 @@ class _ShowFormSheetState extends State<ShowFormSheet> {
   final _localFocus = FocusNode();
   bool _isLoading = false;
   bool get _isEditing => widget.show != null;
+  bool get _isCancelled => widget.show?.cancelled ?? false;
 
   @override
   void initState() {
@@ -1738,6 +1698,202 @@ class _ShowFormSheetState extends State<ShowFormSheet> {
     }
   }
 
+  void _confirmCancel(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppTheme.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.cancel_outlined, color: AppTheme.error, size: 20),
+            SizedBox(width: 8),
+            Text('Cancelar data', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'Marcar a data em "${widget.show!.local}" como cancelada?\n\nO valor do cachê será adicionado em "cancelado".',
+          style: const TextStyle(color: AppTheme.textSecondary, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Voltar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              Navigator.pop(context); // fecha o form sheet
+              setState(() => _isLoading = true);
+              try {
+                await widget.ref.read(showsProvider.notifier).cancelShow(widget.show!);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.cancel_outlined, color: AppTheme.error, size: 16),
+                          SizedBox(width: 8),
+                          Text('Data cancelada'),
+                        ],
+                      ),
+                      backgroundColor: AppTheme.cardElevated,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erro: $e'), backgroundColor: AppTheme.error),
+                  );
+                }
+              }
+            },
+            child: const Text('Cancelar data', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmUncancel(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppTheme.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.undo_rounded, color: AppTheme.success, size: 20),
+            SizedBox(width: 8),
+            Text('Descancelar data', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'Reativar a data em "${widget.show!.local}"?\n\nEla voltará a aparecer como data ativa.',
+          style: const TextStyle(color: AppTheme.textSecondary, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Voltar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.success,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              try {
+                await widget.ref.read(showsProvider.notifier).uncancelShow(widget.show!);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16),
+                          SizedBox(width: 8),
+                          Text('Data reativada'),
+                        ],
+                      ),
+                      backgroundColor: AppTheme.cardElevated,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erro: $e'), backgroundColor: AppTheme.error),
+                  );
+                }
+              }
+            },
+            child: const Text('Descancelar', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteFromSheet(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.card,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppTheme.border),
+        ),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
+            SizedBox(width: 8),
+            Text('Excluir data', style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+          ],
+        ),
+        content: Text(
+          'Excluir definitivamente a data em "${widget.show!.local}"?\n\nEssa ação não pode ser desfeita.',
+          style: const TextStyle(color: AppTheme.textSecondary, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Voltar'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+              try {
+                await widget.ref.read(showsProvider.notifier).deleteShow(widget.show!.id);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 16),
+                          SizedBox(width: 8),
+                          Text('Data excluída'),
+                        ],
+                      ),
+                      backgroundColor: AppTheme.cardElevated,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erro: $e'), backgroundColor: AppTheme.error),
+                  );
+                }
+              }
+            },
+            child: const Text('Excluir', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
@@ -1775,18 +1931,26 @@ class _ShowFormSheetState extends State<ShowFormSheet> {
                       width: 42,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: AppTheme.primaryGlow,
+                        color: _isCancelled ? AppTheme.error.withValues(alpha: 0.12) : AppTheme.primaryGlow,
                         borderRadius: BorderRadius.circular(13),
-                        border: Border.all(color: AppTheme.primary.withValues(alpha: 0.3)),
+                        border: Border.all(
+                          color: _isCancelled
+                              ? AppTheme.error.withValues(alpha: 0.3)
+                              : AppTheme.primary.withValues(alpha: 0.3),
+                        ),
                       ),
-                      child: const Icon(Icons.mic_rounded, color: AppTheme.primary, size: 20),
+                      child: Icon(
+                        _isCancelled ? Icons.cancel_outlined : Icons.mic_rounded,
+                        color: _isCancelled ? AppTheme.error : AppTheme.primary,
+                        size: 20,
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _isEditing ? 'Editar data' : 'Nova data',
+                          _isCancelled ? 'Data cancelada' : (_isEditing ? 'Editar data' : 'Nova data'),
                           style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: AppTheme.textPrimary),
                         ),
                         Text(
@@ -1797,6 +1961,71 @@ class _ShowFormSheetState extends State<ShowFormSheet> {
                     ),
                   ],
                 ),
+
+                // Cancelled banner
+                if (_isCancelled) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded, color: AppTheme.error, size: 16),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Esta data foi cancelada.',
+                            style: TextStyle(fontSize: 12, color: AppTheme.error, height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Uncancel button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoading ? null : () => _confirmUncancel(context),
+                      icon: const Icon(Icons.undo_rounded, size: 18, color: AppTheme.success),
+                      label: const Text(
+                        'Descancelar esta data',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.success),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppTheme.success.withValues(alpha: 0.5)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        backgroundColor: AppTheme.success.withValues(alpha: 0.05),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Delete cancelled show button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoading ? null : () => _confirmDeleteFromSheet(context),
+                      icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppTheme.error),
+                      label: const Text(
+                        'Excluir esta data',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppTheme.error),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppTheme.error.withValues(alpha: 0.4)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        backgroundColor: AppTheme.error.withValues(alpha: 0.04),
+                      ),
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 22),
                 const Text(
                   'LOCAL',
@@ -1806,6 +2035,7 @@ class _ShowFormSheetState extends State<ShowFormSheet> {
                 TextField(
                   controller: _localController,
                   focusNode: _localFocus,
+                  enabled: !_isCancelled,
                   textCapitalization: TextCapitalization.words,
                   style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16),
                   decoration: InputDecoration(
@@ -1827,6 +2057,7 @@ class _ShowFormSheetState extends State<ShowFormSheet> {
                 const SizedBox(height: 8),
                 TextField(
                   controller: _valueController,
+                  enabled: !_isCancelled,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   style: const TextStyle(color: AppTheme.textPrimary, fontSize: 24, fontWeight: FontWeight.w800),
                   decoration: InputDecoration(
@@ -1843,29 +2074,59 @@ class _ShowFormSheetState extends State<ShowFormSheet> {
                   ),
                 ),
                 const SizedBox(height: 22),
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primary,
-                      foregroundColor: AppTheme.background,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 0,
+
+                // Save button (hidden if cancelled)
+                if (!_isCancelled) ...[
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primary,
+                        foregroundColor: AppTheme.background,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        elevation: 0,
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.background),
+                            )
+                          : Text(
+                              _isEditing ? 'Salvar alterações' : 'Salvar',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                            ),
                     ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2.5, color: AppTheme.background),
-                          )
-                        : Text(
-                            _isEditing ? 'Salvar alterações' : 'Salvar',
-                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                          ),
                   ),
-                ),
+                ],
+
+                // Cancel show button (only when editing non-cancelled)
+                if (_isEditing && !_isCancelled) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoading ? null : () => _confirmCancel(context),
+                      icon: const Icon(Icons.cancel_outlined, size: 18, color: AppTheme.error),
+                      label: const Text(
+                        'Cancelar esta data',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.error,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: AppTheme.error.withValues(alpha: 0.5)),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        backgroundColor: AppTheme.error.withValues(alpha: 0.05),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

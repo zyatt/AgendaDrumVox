@@ -6,6 +6,7 @@ class ShowModel {
   final String local;
   final DateTime showDate;
   final double value;
+  final bool cancelled;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -15,6 +16,7 @@ class ShowModel {
     required this.local,
     required this.showDate,
     required this.value,
+    this.cancelled = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -26,6 +28,7 @@ class ShowModel {
       local: map['local'] as String,
       showDate: DateTime.parse(map['show_date'] as String),
       value: (map['value'] as num).toDouble(),
+      cancelled: map['cancelled'] as bool? ?? false,
       createdAt: DateTime.parse(map['created_at'] as String),
       updatedAt: DateTime.parse(map['updated_at'] as String),
     );
@@ -37,6 +40,7 @@ class ShowModel {
       'local': local,
       'show_date': showDate.toIso8601String().split('T').first,
       'value': value,
+      'cancelled': cancelled,
     };
   }
 
@@ -46,6 +50,7 @@ class ShowModel {
     String? local,
     DateTime? showDate,
     double? value,
+    bool? cancelled,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -55,6 +60,7 @@ class ShowModel {
       local: local ?? this.local,
       showDate: showDate ?? this.showDate,
       value: value ?? this.value,
+      cancelled: cancelled ?? this.cancelled,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

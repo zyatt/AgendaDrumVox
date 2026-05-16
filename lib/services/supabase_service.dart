@@ -63,6 +63,46 @@ class SupabaseService {
     return ShowModel.fromMap(response);
   }
 
+  static Future<ShowModel> cancelShow(
+    ShowModel show, {
+    String? deviceToken,
+    String? deviceId,
+  }) async {
+    final data = <String, dynamic>{
+      'cancelled': true,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+    if (deviceToken != null) data['cancelled_by_token'] = deviceToken;
+    if (deviceId != null) data['cancelled_by_device_id'] = deviceId;
+
+    final response = await _client
+        .from('shows')
+        .update(data)
+        .eq('id', show.id)
+        .select()
+        .single();
+
+    return ShowModel.fromMap(response);
+  }
+
+  static Future<ShowModel> uncancelShow(ShowModel show) async {
+    final data = <String, dynamic>{
+      'cancelled': false,
+      'cancelled_by_token': null,
+      'cancelled_by_device_id': null,
+      'updated_at': DateTime.now().toIso8601String(),
+    };
+
+    final response = await _client
+        .from('shows')
+        .update(data)
+        .eq('id', show.id)
+        .select()
+        .single();
+
+    return ShowModel.fromMap(response);
+  }
+
   static Future<void> deleteShow(String showId) async {
     await _client.from('shows').delete().eq('id', showId);
   }
@@ -72,27 +112,34 @@ class SupabaseService {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
 
-    final totalEarnings = shows.fold<double>(0, (sum, s) => sum + s.value);
+    final activeShows = shows.where((s) => !s.cancelled).toList();
+    final cancelledShows = shows.where((s) => s.cancelled).toList();
 
-    final received = shows
+    final totalEarnings = activeShows.fold<double>(0, (sum, s) => sum + s.value);
+
+    final received = activeShows
         .where((s) {
           final d = DateTime(s.showDate.year, s.showDate.month, s.showDate.day);
           return d.isBefore(today);
         })
         .fold<double>(0, (sum, s) => sum + s.value);
 
-    final pending = shows
+    final pending = activeShows
         .where((s) {
           final d = DateTime(s.showDate.year, s.showDate.month, s.showDate.day);
           return !d.isBefore(today);
         })
         .fold<double>(0, (sum, s) => sum + s.value);
 
+    final cancelled = cancelledShows.fold<double>(0, (sum, s) => sum + s.value);
+
     return {
-      'total_shows': shows.length,
+      'total_shows': activeShows.length,
       'total_earnings': totalEarnings,
       'received': received,
       'pending': pending,
+      'cancelled': cancelled,
+      'cancelled_count': cancelledShows.length,
       'shows': shows,
     };
   }
